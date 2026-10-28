@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Escritura, contador de palabras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+/* Layout: una columna angosta. Arriba el contador con la barra hacia el próximo aviso, debajo la hoja rayada para escribir, al pie las acciones. */
+:root {
+  --bg: #F2F5F3;
+  --surface: #FFFFFF;
+  --ink: #14302A;
+  --muted: #566B64;
+  --line: #CFDAD5;
+  --rule: #E3EBE7;
+  --accent: #0B7A63;
+  --accent-ink: #FFFFFF;
+  --hl: #FFE066;
+  --hl-ink: #3B2F00;
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1715;
+    --surface: #16211E;
+    --ink: #E6F0EC;
+    --muted: #9AB0A9;
+    --line: #2A3A36;
+    --rule: #22302C;
+    --accent: #3FC3A3;
+    --accent-ink: #06241D;
+    --hl: #E8C547;
+    --hl-ink: #1F1800;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1715;
+  --surface: #16211E;
+  --ink: #E6F0EC;
+  --muted: #9AB0A9;
+  --line: #2A3A36;
+  --rule: #22302C;
+  --accent: #3FC3A3;
+  --accent-ink: #06241D;
+  --hl: #E8C547;
+  --hl-ink: #1F1800;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+body {
+  background-color: var(--bg);
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 31px, color-mix(in srgb, var(--ink) 9%, transparent) 31px, color-mix(in srgb, var(--ink) 9%, transparent) 32px);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  padding-block: 24px 96px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+header h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  line-height: 1.1;
+  margin: 0 0 4px;
+  text-wrap: balance;
+}
+header p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+.counter {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  transition: background-color .3s, border-color .3s;
+}
+.counter.flash { animation: flash 1.4s ease-out; }
+@keyframes flash {
+  0% { background: var(--hl); border-color: var(--hl); color: var(--hl-ink); }
+  100% { background: var(--surface); }
+}
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.words { display: flex; align-items: baseline; gap: 8px; }
+.words .n {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(3rem, 14vw, 4.5rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.words .l { font-size: 1rem; color: var(--muted); }
+.counter.flash .l { color: inherit; }
+.aux { font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.counter.flash .aux { color: inherit; }
+
+.bar { height: 10px; background: var(--rule); border-radius: 999px; overflow: hidden; }
+.bar > span { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 999px; transition: width .15s ease-out; }
+.next { font-size: 0.9rem; color: var(--muted); margin: 0; font-variant-numeric: tabular-nums; }
+.counter.flash .next { color: inherit; }
+
+.marks { display: flex; flex-wrap: wrap; gap: 8px; min-height: 40px; margin: 0; padding: 0; list-style: none; }
+.marks li {
+  font-size: 0.85rem; font-variant-numeric: tabular-nums;
+  background: var(--accent); color: var(--accent-ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 40px; height: 40px; padding: 0 8px; line-height: 1;
+  border-radius: 999px; font-weight: 600; text-align: center;
+}
+.marks:empty::before { content: "Los avisos que vayas logrando aparecen acá."; font-size: 0.85rem; color: var(--muted); }
+
+.sheet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+textarea#texto {
+  display: block;
+  width: 100%;
+  min-height: 384px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background-color: transparent;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  padding: 16px 18px;
+}
+textarea#texto::placeholder { color: var(--muted); opacity: .8; }
+.sheet:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button {
+  font: inherit; font-size: 0.95rem; font-weight: 600;
+  padding: 10px 16px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.danger-armed { background: var(--hl); border-color: var(--hl); color: var(--hl-ink); }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.settings {
+  display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center;
+  font-size: 0.9rem; color: var(--muted);
+  border-top: 1px solid var(--line); padding-top: 14px;
+}
+.settings label { display: inline-flex; align-items: center; gap: 8px; }
+.settings input[type="number"] {
+  width: 4.5rem; font: inherit; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.settings input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 24px);
+  opacity: 0;
+  pointer-events: none;
+  background: var(--hl);
+  color: var(--hl-ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 12px 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  max-width: calc(100% - 32px);
+  text-align: center;
+  transition: opacity .25s, transform .25s;
+  z-index: 20;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .counter.flash { animation: none; background: var(--hl); color: var(--hl-ink); }
+  .toast, .bar > span { transition: none; }
+}
+</style>
+
+</head>
+<body>
+<main>
+  <header>
+    <h1>Escritura, contador de palabras</h1>
+  </header>
+
+  <section class="counter" id="counter" aria-label="Contador de palabras">
+    <div class="top">
+      <div class="words"><span class="n" id="nPalabras">0</span><span class="l">palabras</span></div>
+      <div class="aux"><span id="nCaracteres">0</span> caracteres</div>
+    </div>
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bar"><span id="barFill"></span></div>
+    <p class="next" id="next">Faltan 50 palabras para el primer aviso.</p>
+    <ul class="marks" id="marks" aria-label="Avisos logrados"></ul>
+  </section>
+
+  <div class="actions">
+    <button class="primary" id="copiar" type="button">Copiar texto</button>
+    <button id="borrar" type="button">Borrar todo</button>
+  </div>
+
+  <div class="settings">
+    <label for="intervalo">Avisar cada <input type="number" id="intervalo" min="5" max="500" step="5" value="50"> palabras</label>
+    <label for="sonido"><input type="checkbox" id="sonido"> Sonido</label>
+  </div>
+
+  <div class="sheet">
+    <label for="texto" style="position:absolute;left:-9999px">Tu texto</label>
+    <textarea id="texto" placeholder="Empezá a escribir acá…" spellcheck="true" autocomplete="off"></textarea>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var texto = $("texto"), counter = $("counter");
+  var STORE = "prueba-escritura-borrador";
+  var announced = 0;
+  var toastTimer = null, armTimer = null;
+
+  function countWords(t) {
+    var m = t.trim().match(/\S+/g);
+    return m ? m.length : 0;
+  }
+  function getInterval() {
+    var v = parseInt($("intervalo").value, 10);
+    if (isNaN(v) || v < 5) v = 50;
+    if (v > 500) v = 500;
+    return v;
+  }
+  function plural(n, s, p) { return n === 1 ? s : p; }
+
+  function beep() {
+    if (!$("sonido").checked) return;
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      var ctx = new Ctx();
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.15, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + 0.36);
+      setTimeout(function () { ctx.close(); }, 600);
+    } catch (e) {}
+  }
+
+  function notify(total) {
+    var t = $("toast");
+    t.textContent = "¡Llegaste a " + total + " palabras!";
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove("show"); }, 3500);
+    counter.classList.remove("flash");
+    void counter.offsetWidth;
+    counter.classList.add("flash");
+    beep();
+  }
+
+  function render(silent) {
+    var text = texto.value;
+    var words = countWords(text);
+    var step = getInterval();
+    var blocks = Math.floor(words / step);
+
+    if (!silent && blocks > announced) notify(blocks * step);
+    announced = blocks;
+
+    $("nPalabras").textContent = words;
+    $("nCaracteres").textContent = text.length;
+
+    var inBlock = words - blocks * step;
+    var pct = Math.round((inBlock / step) * 100);
+    $("barFill").style.width = pct + "%";
+    $("bar").setAttribute("aria-valuenow", pct);
+
+    var left = step - inBlock;
+    var target = (blocks + 1) * step;
+    $("next").textContent = (words === 0
+      ? "Faltan " + step + " palabras para el primer aviso."
+      : "Faltan " + left + " " + plural(left, "palabra", "palabras") + " para llegar a " + target + ".");
+
+    var marks = $("marks");
+    var html = "";
+    var shown = Math.min(blocks, 40);
+    for (var i = 1; i <= shown; i++) html += "<li>" + (i * step) + "</li>";
+    marks.innerHTML = html;
+  }
+
+  function save() {
+    try { localStorage.setItem(STORE, texto.value); } catch (e) {}
+  }
+
+  texto.addEventListener("input", function () { render(false); save(); });
+  $("intervalo").addEventListener("change", function () {
+    $("intervalo").value = getInterval();
+    render(true);
+  });
+
+  $("copiar").addEventListener("click", function () {
+    var btn = $("copiar");
+    var done = function () {
+      btn.textContent = "¡Copiado!";
+      setTimeout(function () { btn.textContent = "Copiar texto"; }, 1800);
+    };
+    var fallback = function () {
+      texto.focus(); texto.select();
+      btn.textContent = "Seleccionado: copialo";
+      setTimeout(function () { btn.textContent = "Copiar texto"; }, 2500);
+    };
+    try {
+      navigator.clipboard.writeText(texto.value).then(done, fallback);
+    } catch (e) { fallback(); }
+  });
+
+  $("borrar").addEventListener("click", function () {
+    var btn = $("borrar");
+    if (btn.classList.contains("danger-armed")) {
+      clearTimeout(armTimer);
+      btn.classList.remove("danger-armed");
+      btn.textContent = "Borrar todo";
+      texto.value = "";
+      render(true);
+      save();
+      texto.focus();
+    } else {
+      btn.classList.add("danger-armed");
+      btn.textContent = "¿Seguro? Tocá otra vez";
+      armTimer = setTimeout(function () {
+        btn.classList.remove("danger-armed");
+        btn.textContent = "Borrar todo";
+      }, 4000);
+    }
+  });
+
+  try {
+    var saved = localStorage.getItem(STORE);
+    if (saved) texto.value = saved;
+  } catch (e) {}
+  render(true);
+})();
+</script>
+</body>
+</html>
